@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">hello</string>
+    <string name="marketcategory_commodity">market.category == &quot;COMMODITY&quot;</string>
+    <string name="val_fill_pathpath_filllinetori">val fill = Path(path); fill.lineTo(right, bottom); fill.lineTo(left, bottom); fill.close()</string>
+</resources>

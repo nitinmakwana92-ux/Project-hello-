@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+
+<html>
+
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+>
+
+<title>Pro Trading Chart</title>
+
+<style>
+
+html,
+body {
+
+    width: 100%;
+    height: 100%;
+
+    margin: 0;
+    padding: 0;
+
+    overflow: hidden;
+
+    background: #0b0f14;
+
+    color: #e5e7eb;
+
+    font-family:
+        Arial,
+        sans-serif;
+}
+
+#app {
+
+    width: 100%;
+    height: 100%;
+
+    display: flex;
+
+    flex-direction: column;
+}
+
+#toolbar {
+
+    height: 48px;
+
+    min-height: 48px;
+
+    width: 100%;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 5px;
+
+    padding:
+        0 8px;
+
+    box-sizing:
+        border-box;
+
+    background:
+        #111820;
+
+    border-bottom:
+        1px solid #26303a;
+
+    overflow-x: auto;
+
+    white-space:
+        nowrap;
+}
+
+#symbol {
+
+    font-size: 14px;
+
+    font-weight: 700;
+
+    margin-right: 5px;
+}
+
+#price {
+
+    margin-left: auto;
+
+    font-size: 13px;
+
+    font-weight: 600;
+
+    padding-left: 8px;
+}
+
+.timeframe {
+
+    border: 0;
+
+    outline: 0;
+
+    background:
+        #202a34;
+
+    color:
+        #d1d5db;
+
+    border-radius:
+        5px;
+
+    padding:
+        6px 9px;
+
+    font-size:
+        11px;
+
+    font-weight:
+        600;
+}
+
+.timeframe.active {
+
+    background:
+        #2962ff;
+
+    color:
+        #ffffff;
+}
+
+#chart {
+
+    position:
+        relative;
+
+    flex:
+        1;
+
+    width:
+        100%;
+
+    min-height:
+        0;
+}
+
+#error {
+
+    display:
+        none;
+
+    position:
+        absolute;
+
+    left:
+        10px;
+
+    right:
+        10px;
+
+    top:
+        60px;
+
+    padding:
+        12px;
+
+    background:
+        #35171a;
+
+    color:
+        #ffb4b4;
+
+    border:
+        1px solid #7f1d1d;
+
+    border-radius:
+        6px;
+
+    font-size:
+        12px;
+
+    z-index:
+        100;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="app">
+
+    <div id="toolbar">
+
+        <span id="symbol">
+            BTC/USDT
+        </span>
+
+        <button
+            class="timeframe active"
+            data-timeframe="1m">
+            1m
+        </button>
+
+        <button
+            class="timeframe"
+            data-timeframe="5m">
+            5m
+        </button>
+
+        <button
+            class="timeframe"
+            data-timeframe="15m">
+            15m
+        </button>
+
+        <button
+            class="timeframe"
+            data-timeframe="1h">
+            1H
+        </button>
+
+        <button
+            class="timeframe"
+            data-timeframe="4h">
+            4H
+        </button>
+
+        <button
+            class="timeframe"
+            data-timeframe="1d">
+            1D
+        </button>
+
+        <span id="price">
+            --
+        </span>
+
+    </div>
+
+    <div id="chart"></div>
+
+    <div id="error"></div>
+
+</div>
+
+
+<script>
+
+(function () {
+
+"use strict";
+
+
+// ============================================================
+// GLOBAL STATE
+// ============================================================
+
+let chart = null;
+
+let candleSeries = null;
+
+let currentSymbol =
+    "BTC/USDT";
+
+let currentTimeframe =
+    "1m";
+
+let currentPrice =
+    0;
+
+let currentCandle =
+    null;
+
+let historicalLoaded =
+    false;
+
+
+// ============================================================
+// ELEMENTS
+// ============================================================
+
+const chartElement =
+    document.getElementById(
+        "chart"
+    );
+
+const symbolElement =
+    document.getElementById(
+        "symbol"
+    );
+
+const priceElement =
+    document.getElementById(
+        "price"
+    );
+
+const errorElement =
+    document.getElementById(
+        "error"
+    );
+
+
+// ============================================================
+// ERROR
+// ============================================================
+
+function showError(
+    message
+) {
+
+    if (!errorElement) {
+        return;
+    }
+
+    errorElement.style.display =
+        "block";
+
+    errorElement.textContent =
+        message;
+}
+
+
+// ============================================================
+// TIMEFRAME SECONDS
+// ============================================================
+
+function timeframeSeconds(
+    timeframe
+) {
+
+    switch (
+        timeframe
+    ) {
+
+        case "1m":
+            return 60;
+
+        case "5m":
+            return 300;
+
+        case "15m":
+            return 900;
+
+        case "1h":
+            return 3600;
+
+        case "4h":
+            return 14400;
+
+        case "1d":
+            return 86400;
+
+        default:
+            return 60;
+    }
+}
+
+
+// ============================================================
+// CREATE CHART
+// ============================================================
+
+function createChart() {
+
+    if (
+        typeof LightweightCharts ===
+        "undefined"
+    ) {
+
+        showError(
+            "Chart library could not load. Check internet connection."
+        );
+
+        return false;
+    }
+
+    chart =
+        LightweightCharts.createChart(
+            chartElement,
+            {
+
+                layout: {
+
+                    background: {
+                        color:
+                            "#0b0f14"
+                    },
+
+                    textColor:
+                        "#d1d5db"
+                },
+
+                grid: {
+
+                    vertLines: {
+                        color:
+                            "#182028"
+                    },
+
+                    horzLines: {
+                        color:
+                            "#182028"
+                    }
+                },
+
+                crosshair: {
+
+                    mode:
+                        LightweightCharts
+                            .CrosshairMode
+                            .Normal
+                },
+
+                rightPriceScale: {
+
+                    borderColor:
+                        "#26303a",
+
+                    scaleMargins: {
+
+                        top:
+                            0.08,
+
+                        bottom:
+                            0.08
+                    }
+                },
+
+                timeScale: {
+
+                    borderColor:
+                        "#26303a",
+
+                    timeVisible:
+                        true,
+
+                    secondsVisible:
+                        false,
+
+                    rightOffset:
+                        8,
+
+                    barSpacing:
+                        7,
+
+                    minBarSpacing:
+                        2
+                },
+
+                handleScroll:
+                    true,
+
+                handleScale:
+                    true
+            }
+        );
+
+
+    // ========================================================
+    // CANDLE SERIES
+    // ========================================================
+
+    candleSeries =
+        chart.addSeries(
+            LightweightCharts
+                .CandlestickSeries,
+            {
+
+                upColor:
+                    "#26a69a",
+
+                downColor:
+                    "#ef5350",
+
+                borderUpColor:
+                    "#26a69a",
+
+                borderDownColor:
+                    "#ef5350",
+
+                wickUpColor:
+                    "#26a69a",
+
+                wickDownColor:
+                    "#ef5350"
+            }
+        );
+
+
+    // ========================================================
+    // RESIZE
+    // ========================================================
+
+    function resizeChart() {
+
+        if (!chart) {
+            return;
+        }
+
+        const width =
+            chartElement
+                .clientWidth;
+
+        const height =
+            chartElement
+                .clientHeight;
+
+        if (
+            width <= 0 ||
+            height <= 0
+        ) {
+            return;
+        }
+
+        chart.resize(
+            width,
+            height
+        );
+    }
+
+
+    if (
+        typeof ResizeObserver !==
+        "undefined"
+    ) {
+
+        const observer =
+            new ResizeObserver(
+                function () {
+
+                    resizeChart();
+
+                }
+            );
+
+        observer.observe(
+            chartElement
+        );
+    }
+
+
+    window.addEventListener(
+        "resize",
+        resizeChart
+    );
+
+
+    return true;
+}
+
+
+// ============================================================
+// SET SYMBOL
+// ============================================================
+
+function setSymbol(
+    symbol
+) {
+
+    if (!symbol) {
+        return;
+    }
+
+    currentSymbol =
+        String(symbol)
+            .trim()
+            .toUpperCase();
+
+    symbolElement.textContent =
+        currentSymbol;
+
+    currentCandle =
+        null;
+
+    historicalLoaded =
+        false;
+
+    if (
+        window.AndroidChart &&
+        typeof window.AndroidChart
+            .onSymbolChanged ===
+            "function"
+    ) {
+
+        window.AndroidChart
+            .onSymbolChanged(
+                currentSymbol
+            );
+    }
+}
+
+
+// ============================================================
+// UPDATE PRICE
+// ============================================================
+
+function updatePrice(
+    price
+) {
+
+    const value =
+        Number(price);
+
+    if (
+        !Number.isFinite(value) ||
+        value <= 0
+    ) {
+        return;
+    }
+
+    currentPrice =
+        value;
+
+    priceElement.textContent =
+        formatPrice(value);
+
+    updateLiveCandle(
+        value
+    );
+}
+
+
+// ============================================================
+// PRICE FORMAT
+// ============================================================
+
+function formatPrice(
+    value
+) {
+
+    if (value >= 1000) {
+
+        return value.toLocaleString(
+            undefined,
+            {
+                maximumFractionDigits:
+                    2
+            }
+        );
+    }
+
+    if (value >= 1) {
+
+        return value.toLocaleString(
+            undefined,
+            {
+                maximumFractionDigits:
+                    6
+            }
+        );
+    }
+
+    return value.toLocaleString(
+        undefined,
+        {
+            maximumFractionDigits:
+                10
+        }
+    );
+}
+
+
+// ============================================================
+// LIVE CANDLE
+// ============================================================
+
+function updateLiveCandle(
+    price
+) {
+
+    if (
+        !candleSeries
+    ) {
+        return;
+    }
+
+    const seconds =
+        timeframeSeconds(
+            currentTimeframe
+        );
+
+    const now =
+        Math.floor(
+            Date.now() / 1000
+        );
+
+    const candleTime =
+        Math.floor(
+            now / seconds
+        ) * seconds;
+
+
+    if (
+        currentCandle === null ||
+        currentCandle.time !==
+            candleTime
+    ) {
+
+        currentCandle = {
+
+            time:
+                candleTime,
+
+            open:
+                price,
+
+            high:
+                price,
+
+            low:
+                price,
+
+            close:
+                price
+        };
+
+    } else {
+
+        currentCandle.high =
+            Math.max(
+                currentCandle.high,
+                price
+            );
+
+        currentCandle.low =
+            Math.min(
+                currentCandle.low,
+                price
+            );
+
+        currentCandle.close =
+            price;
+    }
+
+
+    candleSeries.update(
+        currentCandle
+    );
+}
+
+
+// ============================================================
+// HISTORICAL CANDLES
+//
+// JSON expected:
+// [
+//   {
+//     "time": 1234567890,
+//     "open": 100,
+//     "high": 110,
+//     "low": 90,
+//     "close": 105
+//   }
+// ]
+// ============================================================
+
+function setHistoricalCandles(
+    json
+) {
+
+    if (
+        !candleSeries ||
+        !json
+    ) {
+        return;
+    }
+
+    try {
+
+        const data =
+            typeof json ===
+            "string"
+                ? JSON.parse(json)
+                : json;
+
+        if (
+            !Array.isArray(data)
+        ) {
+            return;
+        }
+
+        const cleaned =
+            data
+                .map(
+                    function (candle) {
+
+                        return {
+
+                            time:
+                                Number(
+                                    candle.time
+                                ),
+
+                            open:
+                                Number(
+                                    candle.open
+                                ),
+
+                            high:
+                                Number(
+                                    candle.high
+                                ),
+
+                            low:
+                                Number(
+                                    candle.low
+                                ),
+
+                            close:
+                                Number(
+                                    candle.close
+                                )
+                        };
+                    }
+                )
+                .filter(
+                    function (candle) {
+
+                        return (
+
+                            Number.isFinite(
+                                candle.time
+                            ) &&
+
+                            Number.isFinite(
+                                candle.open
+                            ) &&
+
+                            Number.isFinite(
+                                candle.high
+                            ) &&
+
+                            Number.isFinite(
+                                candle.low
+                            ) &&
+
+                            Number.isFinite(
+                                candle.close
+                            )
+                        );
+                    }
+                )
+                .sort(
+                    function (a, b) {
+                        return a.time - b.time;
+                    }
+                );
+
+
+        // --------------------------------------------------------
+        // IMPORTANT:
+        // Lightweight Charts requires unique ascending time.
+        // --------------------------------------------------------
+
+        const unique = [];
+
+        const seen =
+            new Set();
+
+        for (
+            const candle of cleaned
+        ) {
+
+            if (
+                seen.has(
+                    candle.time
+                )
+            ) {
+                continue;
+            }
+
+            seen.add(
+                candle.time
+            );
+
+            unique.push(
+                candle
+            );
+        }
+
+
+        if (
+            unique.length === 0
+        ) {
+            return;
+        }
+
+        candleSeries.setData(
+            unique
+        );
+
+        historicalLoaded =
+            true;
+
+        currentCandle =
+            unique[
+                unique.length - 1
+            ];
+
+
+        chart
+            .timeScale()
+            .fitContent();
+
+    } catch (error) {
+
+        showError(
+            "Invalid candle data"
+        );
+
+        console.error(
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// CLEAR
+// ============================================================
+
+function clearChart() {
+
+    if (!candleSeries) {
+        return;
+    }
+
+    candleSeries.setData(
+        []
+    );
+
+    currentCandle =
+        null;
+
+    historicalLoaded =
+        false;
+}
+
+
+// ============================================================
+// TIMEFRAME
+// ============================================================
+
+function changeTimeframe(
+    timeframe
+) {
+
+    currentTimeframe =
+        timeframe;
+
+    currentCandle =
+        null;
+
+    document
+        .querySelectorAll(
+            ".timeframe"
+        )
+        .forEach(
+            function (button) {
+
+                button.classList.toggle(
+                    "active",
+                    button.dataset
+                        .timeframe ===
+                        timeframe
+                );
+            }
+        );
+
+
+    if (
+        window.AndroidChart &&
+        typeof window.AndroidChart
+            .onTimeframeChanged ===
+            "function"
+    ) {
+
+        window.AndroidChart
+            .onTimeframeChanged(
+                timeframe
+            );
+    }
+
+
+    // If historical data isn't available,
+    // continue with the current live price.
+
+    if (
+        currentPrice > 0
+    ) {
+
+        updateLiveCandle(
+            currentPrice
+        );
+    }
+}
+
+
+// ============================================================
+// BUTTON EVENTS
+// ============================================================
+
+document
+    .querySelectorAll(
+        ".timeframe"
+    )
+    .forEach(
+        function (button) {
+
+            button.addEventListener(
+                "click",
+                function () {
+
+                    changeTimeframe(
+                        button.dataset
+                            .timeframe
+                    );
+                }
+            );
+        }
+    );
+
+
+// ============================================================
+// PUBLIC API
+// ============================================================
+
+window.ChartApp = {
+
+    setSymbol:
+        setSymbol,
+
+    updatePrice:
+        updatePrice,
+
+    changeTimeframe:
+        changeTimeframe,
+
+    setHistoricalCandles:
+        setHistoricalCandles,
+
+    clearChart:
+        clearChart
+};
+
+
+// ============================================================
+// START
+// ============================================================
+
+if (
+    createChart()
+) {
+
+    if (
+        window.AndroidChart &&
+        typeof window.AndroidChart
+            .onChartReady ===
+            "function"
+    ) {
+
+        window.AndroidChart
+            .onChartReady();
+    }
+}
+
+})();
+
+</script>
+
+
+<!-- ============================================================
+     LIGHTWEIGHT CHARTS
+     Apache 2.0 licensed library
+     ============================================================ -->
+
+<script
+    src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
+</script>
+
+</body>
+
+</html>

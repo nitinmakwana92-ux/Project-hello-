@@ -1,0 +1,17 @@
+<!-- Add these DIRECTLY under your existing <manifest ...> line. -->
+
+<!-- Android 12 and below -->
+<uses-permission
+    android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+
+<!-- Android 13+ media access, only if the app reads media directly. -->
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+<!-- OPTIONAL: only if you truly need unrestricted shared-storage access.
+     This appears under Android Special app access, not normal App permissions. -->
+<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+<!-- DO NOT put <service> here. Any <service> element belongs inside <application>. -->
